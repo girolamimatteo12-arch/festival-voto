@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Votazioni festival</title>
+<style>
+:root{--bg:#faf7f2;--card:#fff;--tx:#1d1a24;--mu:#6b6578;--ac:#c2185b;--ac2:#fde4ee;--bd:#e5dfd6;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15121b;--card:#201c29;--tx:#f1edf7;--mu:#a49db4;--ac:#ff6fa5;--ac2:#3a1f2d;--bd:#352f42}}
+:root[data-theme="dark"]{--bg:#15121b;--card:#201c29;--tx:#f1edf7;--mu:#a49db4;--ac:#ff6fa5;--ac2:#3a1f2d;--bd:#352f42}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:18px 16px 90px}
+h1{font-size:1.5rem;margin:.2em 0}h2{margin:.2em 0 .6em;font-size:1.2rem}
+.mu,.sub{color:var(--mu)}.sub{font-size:.85rem}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin:12px 0}
+input[type=text],input[type=number],textarea{width:100%;padding:12px;font:inherit;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);margin:4px 0 10px}
+#code{text-transform:uppercase;letter-spacing:.06em;font-size:1.05rem}
+label{display:block;font-size:.85rem;color:var(--mu)}
+.row{display:flex;gap:12px}.row>div{flex:1}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:11px 16px}
+button.p{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:600}
+button:disabled{opacity:.45;cursor:default}
+.err{color:var(--ac);min-height:1.2em;margin:.4em 0}.ok{color:#2e7d32;font-weight:600}
+.art{display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin:7px 0;padding:12px}
+.art.on{background:var(--ac2);border-color:var(--ac)}
+.n{min-width:28px;height:28px;border-radius:50%;background:var(--bd);display:grid;place-items:center;font-size:.8rem}
+.art.on .n{background:var(--ac);color:#fff}
+.sc{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.sc button{padding:7px 0;width:calc((100% - 45px)/10);min-width:28px;font-size:.9rem}
+.sc button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--bd);padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));display:flex;justify-content:space-between;align-items:center;gap:12px}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{padding:8px 6px;border-bottom:1px solid var(--bd);text-align:right;white-space:nowrap}
+th:nth-child(1),td:nth-child(1),th:nth-child(2),td:nth-child(2){text-align:left}
+.fb{height:6px;border-radius:3px;background:var(--ac);margin-top:4px}
+code{background:var(--ac2);padding:2px 7px;border-radius:6px;letter-spacing:.04em}
+.badge{font-size:.75rem;padding:2px 8px;border-radius:99px;background:var(--ac2);color:var(--ac)}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+/* >>> INCOLLA QUI I DATI DI SUPABASE <<< */
+const CFG={url:"https://hpinhkiwkgtygpdrdxhe.supabase.co",key:"sb_publishable_VfgTV3KWEtzXDHf9ThJKTA_8whTvaeY"};
+
+const NAMES=["Luna Marchetti","Dario Valenti","Elisa Fontana","I Cugini di Mare","Marco Bellandi","Sofia Ardenti","Nico Ferraro","Giulia Serpieri","Vittorio Neri","Alba Rinaldi","Tommaso Gallo","Chiara Montefiori","Rocco Lanza","Irene Castaldi","Matteo Sorrenti","Viola Parisi","Fabio Delmonte","Ginevra Altieri","Pietro Vannucci","Martina Solari"];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const configured=!/INCOLLA/.test(CFG.url+CFG.key);
+const LS={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let mem={};
+function devId(){let d=LS.get("fv_dev")||mem.dev;if(!d){d=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+"-"+Math.random().toString(36).slice(2);mem.dev=d;LS.set("fv_dev",d)}return d}
+async function rpc(fn,args){
+  const r=await fetch(CFG.url+"/rest/v1/rpc/"+fn,{method:"POST",headers:{apikey:CFG.key,Authorization:"Bearer "+CFG.key,"Content-Type":"application/json"},body:JSON.stringify(args)});
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  return r.json();
+}
+let S={view:"login",err:"",msg:"",picks:new Set(),scores:{}};
+const linesOf=t=>t.split("\n").map(x=>x.trim()).filter(Boolean);
+
+function head(sub){return `<h1>🎤 ${esc(S.fest?S.fest.name:"Votazioni festival")}</h1><div class="mu">${sub||""}</div>`}
+function render(){
+  const a=$("#app");
+  if(!configured){a.innerHTML=head()+`<div class="card"><b>App non ancora configurata.</b><p class="mu">Apri index.html e inserisci URL e chiave di Supabase nella riga <code>const CFG</code>.</p></div>`;return}
+  ({login:rLogin,pop:rPop,tec:rTec,done:rDone,closed:rDone,elab:rElab,master:rMaster}[S.view])(a);
+}
+function rLogin(a){
+  a.innerHTML=head("Inserisci il codice che ti è stato consegnato")+`<div class="card"><input type="text" id="code" placeholder="CODICE" autocomplete="off" autocapitalize="characters"><div class="err">${esc(S.err)}</div><button class="p" id="go" style="width:100%">Entra</button></div>`;
+  $("#go").onclick=login;$("#code").onkeydown=e=>{if(e.key==="Enter")login()};
+}
+async function login(){
+  const c=$("#code").value.trim();if(!c)return;
+  try{
+    const r=await rpc("fv_login",{p_code:c});
+    if(!r.role){S.err="Codice non valido.";return render()}
+    Object.assign(S,{err:"",msg:"",code:c,role:r.role,fest:r.festival||null,codes:r.codes||null,picks:new Set(),scores:{},already:false});
+    if(r.role==="master"){await loadList();S.view="master"}
+    else if(r.role==="elab"){await loadRes();S.view="elab"}
+    else{
+      const voted=LS.get("fv_voted_"+S.fest.id)||await rpc("fv_has_voted",{p_code:c,p_voter:devId()});
+      S.already=!!voted;S.view=voted?"done":(S.fest.open?r.role:"closed");
+    }
+  }catch(e){S.err="Errore di connessione. Riprova."}
+  render();
+}
+function rDone(a){
+  const closed=S.view==="closed";
+  a.innerHTML=head()+`<div class="card" style="text-align:center"><div style="font-size:3rem">${closed?"🔒":"✅"}</div><h2>${closed?"Le votazioni sono chiuse":"Grazie, voto registrato!"}</h2><p class="mu">${closed?"Non è possibile votare in questo momento.":S.already?"Hai già votato con questo dispositivo.":"Il tuo voto è stato inviato correttamente."}</p></div>`;
+}
+function rPop(a){
+  const N=S.fest.n_pref,n=S.picks.size;
+  a.innerHTML=head(`Giuria popolare · scegli esattamente ${N} artisti`)+S.fest.artists.map((x,i)=>`<button class="art ${S.picks.has(i)?"on":""}" data-i="${i}"><span class="n">${S.picks.has(i)?"✓":i+1}</span><b>${esc(x)}</b></button>`).join("")+`<div class="err">${esc(S.err)}</div><div class="bar"><span><b>${n}</b> / ${N} scelti</span><button class="p" id="send" ${n===N?"":"disabled"}>Invia il voto</button></div>`;
+  a.querySelectorAll(".art").forEach(b=>b.onclick=()=>{const i=+b.dataset.i;if(S.picks.has(i))S.picks.delete(i);else if(S.picks.size<N)S.picks.add(i);S.err="";const y=scrollY;render();scrollTo(0,y)});
+  $("#send").onclick=()=>submit({picks:[...S.picks].sort((x,y)=>x-y)});
+}
+function rTec(a){
+  const L=S.fest.artists,d=Object.keys(S.scores).length;
+  a.innerHTML=head("Giuria tecnica · assegna un voto da 1 a 10 a ogni artista")+L.map((x,i)=>`<div class="card" style="padding:12px"><b>${i+1}. ${esc(x)}</b><div class="sc">${[1,2,3,4,5,6,7,8,9,10].map(v=>`<button class="${S.scores[i]===v?"on":""}" data-i="${i}" data-v="${v}">${v}</button>`).join("")}</div></div>`).join("")+`<div class="err">${esc(S.err)}</div><div class="bar"><span><b>${d}</b> / ${L.length} votati</span><button class="p" id="send" ${d===L.length?"":"disabled"}>Invia i voti</button></div>`;
+  a.querySelectorAll(".sc button").forEach(b=>b.onclick=()=>{S.scores[b.dataset.i]=+b.dataset.v;const y=scrollY;render();scrollTo(0,y)});
+  $("#send").onclick=()=>submit({scores:L.map((_,i)=>S.scores[i])});
+}
+async function submit(data){
+  try{
+    const r=await rpc("fv_vote",{p_code:S.code,p_voter:devId(),p_data:data});
+    if(r==="ok"||r==="dup"){LS.set("fv_voted_"+S.fest.id,true);S.already=r==="dup";S.view="done"}
+    else S.err=r==="closed"?"Le votazioni sono chiuse.":"Voto non valido. Riprova.";
+  }catch(e){S.err="Impossibile inviare il voto. Riprova."}
+  render();
+}
+
+/* ---- elaboratore ---- */
+async function loadRes(){S.res=await rpc("fv_results",{p_code:S.code})}
+function compute(){
+  const R=S.res,wp=S.fest.w_pop,wt=100-wp;
+  const tp=Object.values(R.pop).reduce((a,b)=>a+b,0),tt=Object.values(R.tec).reduce((a,b)=>a+b,0);
+  return S.fest.artists.map((n,i)=>{
+    const pref=R.pop[i]||0,sum=R.tec[i]||0,pp=tp?wp*pref/tp:0,tc=tt?wt*sum/tt:0;
+    return{n,pref,sum,pop:pp,tec:tc,tot:pp+tc};
+  }).sort((a,b)=>b.tot-a.tot);
+}
+function rElab(a){
+  const f=S.fest,rows=compute(),mx=Math.max(...rows.map(r=>r.tot),1);
+  a.innerHTML=head("Pannello elaboratore")+`<div class="card"><h2>Codici di accesso</h2><p>Giuria popolare: <code>${esc(S.codes.pop)}</code></p><p>Giuria tecnica: <code>${esc(S.codes.tec)}</code></p><p class="sub">Un voto per dispositivo. Stato: <span class="badge">${f.open?"votazioni aperte":"votazioni chiuse"}</span></p></div>
+  <div class="card"><h2>Classifica</h2><p class="sub">Votanti popolari: <b>${S.res.nP}</b> · Giurati tecnici: <b>${S.res.nT}</b><br>Punteggio = ${f.w_pop}% quota popolare (preferenze sul totale) + ${100-f.w_pop}% quota tecnica (somma voti sul totale).</p>
+  <div class="tw"><table><tr><th>#</th><th>Artista</th><th>Pref.</th><th>Pop. (${f.w_pop})</th><th>Voti tec.</th><th>Tec. (${100-f.w_pop})</th><th>Totale</th></tr>`+
+  rows.map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.n)}</b><div class="fb" style="width:${r.tot/mx*100}%"></div></td><td>${r.pref}</td><td>${r.pop.toFixed(2)}</td><td>${r.sum}</td><td>${r.tec.toFixed(2)}</td><td><b>${r.tot.toFixed(2)}</b></td></tr>`).join("")+
+  `</table></div><p><button id="rf">↻ Aggiorna</button></p></div>
+  <div class="card"><h2>Impostazioni festival</h2>
+  <label>Nome del festival</label><input type="text" id="sn" value="${esc(f.name)}">
+  <label>Artisti (uno per riga)</label><textarea id="sa" rows="10">${esc(f.artists.join("\n"))}</textarea>
+  <div class="row"><div><label>Peso giuria popolare (%)</label><input type="number" id="sw" min="0" max="100" value="${f.w_pop}"></div><div><label>Preferenze per votante</label><input type="number" id="sp" min="1" value="${f.n_pref}"></div></div>
+  <p class="sub">Giuria tecnica = 100 − peso popolare. Una volta arrivato il primo voto non puoi più cambiare il numero di artisti né le preferenze (puoi correggere i nomi).</p>
+  <label style="display:flex;gap:8px;align-items:center;color:var(--tx);margin-bottom:12px"><input type="checkbox" id="so" ${f.open?"checked":""}> Votazioni aperte</label>
+  <div class="err ${S.msg?"ok":""}">${esc(S.msg||S.err)}</div>
+  <button class="p" id="sv">Salva impostazioni</button> <button id="rs">Azzera tutti i voti</button></div>
+  <button id="ex">Esci</button>`;
+  $("#rf").onclick=async()=>{try{await loadRes();S.msg=S.err=""}catch(e){S.err="Errore di connessione."}render()};
+  $("#ex").onclick=logout;
+  $("#sv").onclick=async()=>{
+    const arts=linesOf($("#sa").value);
+    try{
+      const r=await rpc("fv_save",{p_code:S.code,p_name:$("#sn").value,p_artists:arts,p_w_pop:+$("#sw").value,p_n_pref:+$("#sp").value,p_open:$("#so").checked});
+      if(r==="ok"){const l=await rpc("fv_login",{p_code:S.code});S.fest=l.festival;await loadRes();S.msg="Impostazioni salvate.";S.err=""}
+      else{S.msg="";S.err=r==="has_votes"?"Ci sono già voti: non puoi cambiare il numero di artisti o di preferenze. Azzera prima i voti.":"Dati non validi: servono da 2 a 60 artisti e un numero di preferenze tra 1 e il numero di artisti."}
+    }catch(e){S.msg="";S.err="Errore di connessione."}
+    render();
+  };
+  $("#rs").onclick=async()=>{
+    if(!confirm("Cancellare TUTTI i voti di questo festival? L’operazione non si può annullare."))return;
+    try{await rpc("fv_reset",{p_code:S.code});await loadRes();S.msg="Voti azzerati.";S.err=""}catch(e){S.msg="";S.err="Errore di connessione."}
+    render();
+  };
+}
+
+/* ---- master: gestione di più festival ---- */
+async function loadList(){S.list=await rpc("fv_list",{p_admin:S.code})}
+function rMaster(a){
+  a.innerHTML=head("Gestione festival")+`<div class="card"><h2>Nuovo festival</h2>
+  <label>Nome</label><input type="text" id="nn" placeholder="Es. Festival 2027">
+  <label>Artisti (uno per riga, poi modificabili dall’elaboratore)</label><textarea id="na" rows="8">${esc(NAMES.join("\n"))}</textarea>
+  <div class="err ${S.msg?"ok":""}">${esc(S.msg||S.err)}</div><button class="p" id="cr">Crea festival</button></div>
+  <h2 style="margin-top:20px">Festival esistenti (${S.list.length})</h2>`+
+  (S.list.length?S.list.map(f=>`<div class="card"><b>${esc(f.name)}</b> <span class="badge">${f.open?"aperto":"chiuso"}</span><div class="sub">${f.n} artisti · ${f.votes} voti</div>
+  <p>Elaboratore: <code>${esc(f.elab)}</code><br>Popolare: <code>${esc(f.pop)}</code><br>Tecnica: <code>${esc(f.tec)}</code></p><button data-del="${esc(f.id)}">Elimina</button></div>`).join(""):`<p class="mu">Nessun festival ancora.</p>`)+
+  `<p><button id="ex">Esci</button></p>`;
+  $("#ex").onclick=logout;
+  $("#cr").onclick=async()=>{
+    try{
+      const r=await rpc("fv_create",{p_admin:S.code,p_name:$("#nn").value,p_artists:linesOf($("#na").value)});
+      if(r==="ok"){await loadList();S.msg="Festival creato.";S.err=""}else{S.msg="";S.err="Inserisci un nome e da 2 a 60 artisti."}
+    }catch(e){S.msg="";S.err="Errore di connessione."}
+    render();
+  };
+  a.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
+    if(!confirm("Eliminare questo festival e tutti i suoi voti?"))return;
+    try{await rpc("fv_delete",{p_admin:S.code,p_id:b.dataset.del});await loadList();S.msg=S.err=""}catch(e){S.err="Errore di connessione."}
+    render();
+  });
+}
+function logout(){S={view:"login",err:"",msg:"",picks:new Set(),scores:{}};render()}
+render();
+</script>
+</body>
+</html>
